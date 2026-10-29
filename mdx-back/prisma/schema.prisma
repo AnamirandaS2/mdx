@@ -1,0 +1,331 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum GlobalRole {
+  ADMIN
+  USER
+}
+
+enum EventStatus {
+  DRAFT
+  PUBLISHED
+  CLOSED
+}
+
+enum EventRole {
+  ORGANIZER
+  STAFF
+  MONITOR
+  JUDGE
+}
+
+enum ActivityType {
+  STAND
+  TALK
+  WORKSHOP
+  COMPETITION
+  CULTURAL
+  OTHER
+}
+
+enum FieldType {
+  TEXT
+  LONGTEXT
+  SELECT
+  CHECKBOX
+  NUMBER
+}
+
+enum RegistrationCategory {
+  VISITOR
+  SCHOOL
+  COMPETITOR
+  STAFF
+}
+
+enum RegistrationStatus {
+  CONFIRMED
+  CANCELLED
+}
+
+enum EnrollmentStatus {
+  CONFIRMED
+  WAITLIST
+  CANCELLED
+}
+
+model User {
+  id           String     @id @default(uuid()) @db.Uuid
+  name         String
+  email        String     @unique
+  passwordHash String     @map("password_hash")
+  role         GlobalRole @default(USER)
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+
+  memberships   EventMember[]
+  registrations Registration[]
+  stampsGiven   Stamp[]        @relation("StampStampedBy")
+  teamMembers   TeamMember[]
+
+  @@map("users")
+}
+
+model Event {
+  id                String      @id @default(uuid()) @db.Uuid
+  slug              String      @unique
+  title             String
+  description       String      @db.Text
+  theme             String
+  place             String
+  address           String
+  startsAt          DateTime    @map("starts_at")
+  endsAt            DateTime    @map("ends_at")
+  banner            String?
+  status            EventStatus @default(DRAFT)
+  registrationsOpen Boolean     @default(false) @map("registrations_open")
+  capacity          Int?
+  colorPrimary      String?     @map("color_primary")
+  colorSecondary    String?     @map("color_secondary")
+  colorAccent       String?     @map("color_accent")
+  createdAt         DateTime    @default(now()) @map("created_at")
+  updatedAt         DateTime    @updatedAt @map("updated_at")
+
+  members       EventMember[]
+  locations     Location[]
+  activities    Activity[]
+  formFields    FormField[]
+  registrations Registration[]
+  announcements Announcement[]
+
+  @@index([status])
+  @@index([startsAt])
+  @@map("events")
+}
+
+model EventMember {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  eventId   String    @map("event_id") @db.Uuid
+  role      EventRole
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, eventId])
+  @@index([eventId, role])
+  @@map("event_members")
+}
+
+model Location {
+  id        String   @id @default(uuid()) @db.Uuid
+  eventId   String   @map("event_id") @db.Uuid
+  name      String
+  notes     String?  @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  event      Event      @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  activities Activity[]
+
+  @@unique([eventId, name])
+  @@map("locations")
+}
+
+model Activity {
+  id                 String       @id @default(uuid()) @db.Uuid
+  eventId            String       @map("event_id") @db.Uuid
+  locationId         String?      @map("location_id") @db.Uuid
+  title              String
+  description        String       @db.Text
+  type               ActivityType
+  startsAt           DateTime     @map("starts_at")
+  endsAt             DateTime     @map("ends_at")
+  capacity           Int?
+  requiresEnrollment Boolean      @default(false) @map("requires_enrollment")
+  grantsStamp        Boolean      @default(false) @map("grants_stamp")
+  responsible        String
+  displayOrder       Int          @map("display_order")
+  createdAt          DateTime     @default(now()) @map("created_at")
+  updatedAt          DateTime     @updatedAt @map("updated_at")
+
+  event       Event                @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  location    Location?            @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  enrollments ActivityEnrollment[]
+  stamps      Stamp[]
+  competition Competition?
+
+  @@index([eventId, displayOrder])
+  @@index([eventId, startsAt])
+  @@index([locationId])
+  @@map("activities")
+}
+
+model FormField {
+  id           String    @id @default(uuid()) @db.Uuid
+  eventId      String    @map("event_id") @db.Uuid
+  label        String
+  type         FieldType
+  required     Boolean   @default(false)
+  options      String[]  @default([])
+  displayOrder Int       @map("display_order")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, displayOrder])
+  @@map("form_fields")
+}
+
+model Registration {
+  id           String               @id @default(uuid()) @db.Uuid
+  userId       String               @map("user_id") @db.Uuid
+  eventId      String               @map("event_id") @db.Uuid
+  passportCode String               @unique @map("passport_code") @db.VarChar(12)
+  category     RegistrationCategory
+  answers      Json                 @default("{}")
+  status       RegistrationStatus   @default(CONFIRMED)
+  checkedInAt  DateTime?            @map("checked_in_at")
+  createdAt    DateTime             @default(now()) @map("created_at")
+  updatedAt    DateTime             @updatedAt @map("updated_at")
+
+  user        User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  event       Event                @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  enrollments ActivityEnrollment[]
+  stamps      Stamp[]
+  certificate Certificate?
+
+  @@unique([userId, eventId])
+  @@index([eventId, status])
+  @@index([eventId, category])
+  @@map("registrations")
+}
+
+model ActivityEnrollment {
+  id             String           @id @default(uuid()) @db.Uuid
+  registrationId String           @map("registration_id") @db.Uuid
+  activityId     String           @map("activity_id") @db.Uuid
+  status         EnrollmentStatus @default(CONFIRMED)
+  createdAt      DateTime         @default(now()) @map("created_at")
+  updatedAt      DateTime         @updatedAt @map("updated_at")
+
+  registration Registration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  activity     Activity     @relation(fields: [activityId], references: [id], onDelete: Cascade)
+
+  @@unique([registrationId, activityId])
+  @@index([activityId, status])
+  @@map("activity_enrollments")
+}
+
+model Stamp {
+  id             String   @id @default(uuid()) @db.Uuid
+  registrationId String   @map("registration_id") @db.Uuid
+  activityId     String   @map("activity_id") @db.Uuid
+  stampedById    String   @map("stamped_by_id") @db.Uuid
+  stampedAt      DateTime @default(now()) @map("stamped_at")
+
+  registration Registration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  activity     Activity     @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  stampedBy    User         @relation("StampStampedBy", fields: [stampedById], references: [id], onDelete: Restrict)
+
+  @@unique([registrationId, activityId])
+  @@index([activityId])
+  @@index([stampedById])
+  @@map("stamps")
+}
+
+model Competition {
+  id         String   @id @default(uuid()) @db.Uuid
+  activityId String   @unique @map("activity_id") @db.Uuid
+  name       String
+  rules      String?  @db.Text
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  activity Activity      @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  teams    Team[]
+  results  MatchResult[]
+
+  @@map("competitions")
+}
+
+model Team {
+  id            String   @id @default(uuid()) @db.Uuid
+  competitionId String   @map("competition_id") @db.Uuid
+  name          String
+  school        String?
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  competition Competition   @relation(fields: [competitionId], references: [id], onDelete: Cascade)
+  members     TeamMember[]
+  results     MatchResult[]
+
+  @@unique([competitionId, name])
+  @@map("teams")
+}
+
+model TeamMember {
+  id        String   @id @default(uuid()) @db.Uuid
+  teamId    String   @map("team_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at")
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, userId])
+  @@index([userId])
+  @@map("team_members")
+}
+
+model MatchResult {
+  id            String   @id @default(uuid()) @db.Uuid
+  competitionId String   @map("competition_id") @db.Uuid
+  teamId        String   @map("team_id") @db.Uuid
+  round         Int
+  score         Decimal  @db.Decimal(8, 2)
+  notes         String?
+  recordedAt    DateTime @default(now()) @map("recorded_at")
+
+  competition Competition @relation(fields: [competitionId], references: [id], onDelete: Cascade)
+  team        Team        @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@unique([competitionId, round, teamId])
+  @@index([teamId])
+  @@map("match_results")
+}
+
+model Announcement {
+  id          String    @id @default(uuid()) @db.Uuid
+  eventId     String    @map("event_id") @db.Uuid
+  title       String
+  body        String    @db.Text
+  publishedAt DateTime? @map("published_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@index([eventId, publishedAt])
+  @@map("announcements")
+}
+
+model Certificate {
+  id             String   @id @default(uuid()) @db.Uuid
+  registrationId String   @unique @map("registration_id") @db.Uuid
+  code           String   @unique @db.VarChar(16)
+  issuedAt       DateTime @default(now()) @map("issued_at")
+
+  registration Registration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+
+  @@map("certificates")
+}
