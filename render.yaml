@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: mdx-api
+    runtime: node
+    plan: free
+    region: oregon
+    rootDir: mdx-back
+    buildCommand: npx npm@11 install --include=dev && npx prisma generate && npm run build
+    startCommand: npm run start:prod
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: "22"
+      - key: DATABASE_URL
+        sync: false
+      - key: FRONTEND_URL
+        sync: false

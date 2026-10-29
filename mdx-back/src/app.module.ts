@@ -12,12 +12,18 @@ import { HealthModule } from './health/health.module.js';
     }),
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
-      useFactory: (config: ConfigService) => ({
-        type: 'postgres' as const,
-        url: config.getOrThrow<string>('DATABASE_URL'),
-        autoLoadEntities: true,
-        synchronize: false,
-      }),
+      useFactory: (config: ConfigService) => {
+        const url = config.getOrThrow<string>('DATABASE_URL');
+        const ssl = url.includes('sslmode=require');
+
+        return {
+          type: 'postgres' as const,
+          url,
+          autoLoadEntities: true,
+          synchronize: false,
+          ssl: ssl ? { rejectUnauthorized: false } : undefined,
+        };
+      },
     }),
     HealthModule,
   ],

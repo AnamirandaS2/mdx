@@ -19,7 +19,7 @@ export class HealthController {
   @ApiOkResponse({ description: 'API e Postgres respondendo' })
   check() {
     return this.health.check([
-      () => this.db.pingCheck('database').withTimeout(1000),
+      () => this.db.pingCheck('database').withTimeout(10_000),
     ]);
   }
 }
