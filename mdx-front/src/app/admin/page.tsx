@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { PageHeader } from "@/components/brand/page-header";
 import { Card, CardContent } from "@/components/ui/card";
 
@@ -17,6 +18,11 @@ export default function AdminPage() {
         <CardContent>
           <p>
             Use Tab para chegar no menu e Enter ou Espaço no botão de recolher.
+          </p>
+          <p>
+            <Link href="/admin/eventos" className="text-brand-pink-dark underline-offset-4 hover:underline">
+              Abrir a área de eventos
+            </Link>
           </p>
         </CardContent>
       </Card>

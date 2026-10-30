@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { PublicFooter } from "@/components/layout/public-footer";
 import { PublicHeader } from "@/components/layout/public-header";
 
@@ -10,7 +11,9 @@ export default function PublicLayout({ children }: LayoutProps<"/">) {
       >
         Ir para o conteúdo
       </a>
-      <PublicHeader />
+      <Suspense fallback={<div className="h-16 border-b border-brand-purple/15 bg-white" />}>
+        <PublicHeader />
+      </Suspense>
       <div id="conteudo" className="flex-1">
         {children}
       </div>

@@ -11,6 +11,7 @@ export default defineConfig({
       PORT: '3001',
       DATABASE_URL: 'postgresql://mdx:mdx@localhost:5432/mdx',
       FRONTEND_URL: 'http://localhost:3000',
+      JWT_SECRET: 'dev-only-change-me-please-32chars',
     },
   },
 });

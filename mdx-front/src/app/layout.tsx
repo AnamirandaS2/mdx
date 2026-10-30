@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Atkinson_Hyperlegible, Poppins } from "next/font/google";
 import { Toaster } from "@/components/ui/toast";
+import { AuthProvider } from "@/components/auth/auth-provider";
 import "./globals.css";
 
 const poppins = Poppins({
@@ -32,7 +33,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${poppins.variable} ${atkinson.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col">
-        <Toaster>{children}</Toaster>
+        <AuthProvider>
+          <Toaster>{children}</Toaster>
+        </AuthProvider>
       </body>
     </html>
   );

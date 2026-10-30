@@ -1,7 +1,9 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { AuthModule } from './auth/auth.module.js';
 import { validateEnv } from './config/env.schema.js';
+import { EventsModule } from './events/events.module.js';
 import { HealthModule } from './health/health.module.js';
 
 @Module({
@@ -26,6 +28,8 @@ import { HealthModule } from './health/health.module.js';
       },
     }),
     HealthModule,
+    AuthModule,
+    EventsModule,
   ],
 })
 export class AppModule {}

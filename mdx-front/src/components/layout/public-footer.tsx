@@ -1,5 +1,3 @@
-import { Bandeirola } from "@/components/brand/bandeirola";
-
 export function PublicFooter() {
   return (
     <footer className="mt-auto border-t border-brand-purple/15 bg-white">
@@ -10,15 +8,13 @@ export function PublicFooter() {
         <span className="flex-1 bg-brand-pink-dark" />
       </div>
       <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-8 sm:flex-row sm:items-end sm:justify-between">
-        <div className="flex items-end gap-3">
-          <span className="flex gap-1" aria-hidden="true">
-            <Bandeirola letra="M" cor="rosa" tamanho="sm" />
-            <Bandeirola letra="D" cor="roxo-vivo" tamanho="sm" />
-          </span>
-          <p className="font-heading text-lg font-semibold text-brand-ink">
-            Mermãs Digitais
-          </p>
-        </div>
+        <img
+          src="/marca/logo-mermas.svg"
+          alt="Mermãs Digitais"
+          width={105}
+          height={38}
+          className="h-10 w-auto"
+        />
         <p className="max-w-sm text-sm leading-6 text-brand-purple">
           Tecnologia com escuta, clareza e espaço para quem constrói junto.
         </p>

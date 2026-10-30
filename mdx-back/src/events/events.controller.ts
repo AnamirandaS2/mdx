@@ -1,0 +1,373 @@
+import { createReadStream } from 'node:fs';
+import { access } from 'node:fs/promises';
+import {
+  Body,
+  Catch,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  HttpException,
+  NotFoundException,
+  Param,
+  Patch,
+  Post,
+  Req,
+  StreamableFile,
+  UploadedFile,
+  UseFilters,
+  UseGuards,
+  UseInterceptors,
+  type ArgumentsHost,
+  type ExceptionFilter,
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { AuthGuard, PermissionGuard, RequirePermission } from '../auth/auth.guard.js';
+import { BANNER_MAX_BYTES } from '../server/event-schema.js';
+import {
+  canAccessAdmin,
+  canCreateEvent,
+  canManageEvent,
+  type AuthUser,
+} from '../server/permissions.js';
+import { EventsService, uploadPath } from './events.service.js';
+
+type AuthedRequest = { user: AuthUser };
+
+type Upload = { mimetype: string; size: number; buffer: Buffer };
+
+type HttpReply = {
+  status(code: number): { json(body: unknown): void };
+};
+
+@Catch()
+class BannerExceptionFilter implements ExceptionFilter {
+  catch(exception: unknown, host: ArgumentsHost) {
+    const response = host.switchToHttp().getResponse<HttpReply>();
+    if (isFileTooLarge(exception)) {
+      response.status(400).json({
+        statusCode: 400,
+        message: 'A imagem pode ter no máximo 2 MB.',
+      });
+      return;
+    }
+    if (exception instanceof HttpException) {
+      const body = exception.getResponse();
+      const status = exception.getStatus();
+      response
+        .status(status)
+        .json(typeof body === 'string' ? { statusCode: status, message: body } : body);
+      return;
+    }
+    response.status(500).json({
+      statusCode: 500,
+      message: 'Não foi possível enviar a imagem.',
+    });
+  }
+}
+
+const manage = RequirePermission((user, request) =>
+  canManageEvent(user, request.params.eventId ?? ''),
+);
+
+@Controller('admin/events')
+@UseGuards(AuthGuard, PermissionGuard)
+export class AdminEventsController {
+  constructor(private readonly events: EventsService) {}
+
+  @Get()
+  @RequirePermission((user) => canAccessAdmin(user))
+  list(@Req() request: AuthedRequest) {
+    return this.events.list(request.user);
+  }
+
+  @Post()
+  @HttpCode(201)
+  @RequirePermission((user) => canCreateEvent(user))
+  create(@Body() body: unknown) {
+    return this.events.create(body);
+  }
+
+  @Get(':eventId')
+  @manage
+  detail(@Param('eventId') eventId: string, @Req() request: AuthedRequest) {
+    return this.events.detail(request.user, eventId);
+  }
+
+  @Patch(':eventId')
+  @manage
+  update(
+    @Param('eventId') eventId: string,
+    @Body() body: unknown,
+    @Req() request: AuthedRequest,
+  ) {
+    if (isProbe(body)) return { ok: true };
+    return this.events.update(eventId, body, request.user);
+  }
+
+  @Post(':eventId/duplicate')
+  @HttpCode(201)
+  @manage
+  duplicate(@Param('eventId') eventId: string, @Req() request: AuthedRequest) {
+    return this.events.duplicate(request.user, eventId);
+  }
+
+  @Post(':eventId/publish')
+  @HttpCode(200)
+  @manage
+  publish(@Param('eventId') eventId: string, @Req() request: AuthedRequest) {
+    return this.events.publish(request.user, eventId);
+  }
+
+  @Post(':eventId/close')
+  @HttpCode(200)
+  @manage
+  close(@Param('eventId') eventId: string, @Req() request: AuthedRequest) {
+    return this.events.close(request.user, eventId);
+  }
+
+  @Post(':eventId/banner')
+  @HttpCode(200)
+  @manage
+  @UseFilters(BannerExceptionFilter)
+  @UseInterceptors(
+    FileInterceptor('banner', { limits: { fileSize: BANNER_MAX_BYTES } }),
+  )
+  banner(
+    @Param('eventId') eventId: string,
+    @UploadedFile() file: Upload | undefined,
+    @Req() request: AuthedRequest,
+  ) {
+    return this.events.saveBanner(request.user, eventId, file);
+  }
+
+  @Post(':eventId/locations')
+  @HttpCode(201)
+  @manage
+  createLocation(
+    @Param('eventId') eventId: string,
+    @Body() body: unknown,
+    @Req() request: AuthedRequest,
+  ) {
+    return this.events.createLocation(eventId, body, request.user);
+  }
+
+  @Delete(':eventId/locations/:locationId')
+  @manage
+  deleteLocation(
+    @Param('eventId') eventId: string,
+    @Param('locationId') locationId: string,
+    @Req() request: AuthedRequest,
+  ) {
+    return this.events.deleteLocation(eventId, locationId, request.user);
+  }
+
+  @Post(':eventId/members')
+  @HttpCode(201)
+  @manage
+  invite(
+    @Param('eventId') eventId: string,
+    @Body() body: unknown,
+    @Req() request: AuthedRequest,
+  ) {
+    return this.events.invite(eventId, body, request.user);
+  }
+
+  @Patch(':eventId/members/:memberId')
+  @manage
+  changeRole(
+    @Param('eventId') eventId: string,
+    @Param('memberId') memberId: string,
+    @Body() body: unknown,
+    @Req() request: AuthedRequest,
+  ) {
+    return this.events.changeRole(eventId, memberId, body, request.user);
+  }
+
+  @Delete(':eventId/members/:memberId')
+  @manage
+  removeMember(
+    @Param('eventId') eventId: string,
+    @Param('memberId') memberId: string,
+    @Req() request: AuthedRequest,
+  ) {
+    return this.events.removeMember(eventId, memberId, request.user);
+  }
+
+  @Post(':eventId/activities')
+  @HttpCode(201)
+  @manage
+  createActivity(
+    @Param('eventId') eventId: string,
+    @Body() body: unknown,
+    @Req() request: AuthedRequest,
+  ) {
+    return this.events.createActivity(eventId, body, request.user);
+  }
+
+  @Post(':eventId/activities/steam')
+  @HttpCode(201)
+  @manage
+  createSteamStands(@Param('eventId') eventId: string, @Req() request: AuthedRequest) {
+    return this.events.createSteamStands(eventId, request.user);
+  }
+
+  @Post(':eventId/activities/reorder')
+  @HttpCode(200)
+  @manage
+  reorderActivities(
+    @Param('eventId') eventId: string,
+    @Body() body: unknown,
+    @Req() request: AuthedRequest,
+  ) {
+    return this.events.reorderActivities(eventId, body, request.user);
+  }
+
+  @Patch(':eventId/activities/:activityId')
+  @manage
+  updateActivity(
+    @Param('eventId') eventId: string,
+    @Param('activityId') activityId: string,
+    @Body() body: unknown,
+    @Req() request: AuthedRequest,
+  ) {
+    return this.events.updateActivity(eventId, activityId, body, request.user);
+  }
+
+  @Post(':eventId/activities/:activityId/duplicate')
+  @HttpCode(201)
+  @manage
+  duplicateActivity(
+    @Param('eventId') eventId: string,
+    @Param('activityId') activityId: string,
+    @Req() request: AuthedRequest,
+  ) {
+    return this.events.duplicateActivity(eventId, activityId, request.user);
+  }
+
+  @Post(':eventId/form-fields')
+  @HttpCode(201)
+  @manage
+  createFormField(
+    @Param('eventId') eventId: string,
+    @Body() body: unknown,
+    @Req() request: AuthedRequest,
+  ) {
+    return this.events.createFormField(eventId, body, request.user);
+  }
+
+  @Post(':eventId/form-fields/reorder')
+  @HttpCode(200)
+  @manage
+  reorderFormFields(
+    @Param('eventId') eventId: string,
+    @Body() body: unknown,
+    @Req() request: AuthedRequest,
+  ) {
+    return this.events.reorderFormFields(eventId, body, request.user);
+  }
+
+  @Post(':eventId/form-fields/competitor')
+  @HttpCode(201)
+  @manage
+  createCompetitorFields(@Param('eventId') eventId: string, @Req() request: AuthedRequest) {
+    return this.events.createCompetitorFields(eventId, request.user);
+  }
+
+  @Patch(':eventId/form-fields/:fieldId')
+  @manage
+  updateFormField(
+    @Param('eventId') eventId: string,
+    @Param('fieldId') fieldId: string,
+    @Body() body: unknown,
+    @Req() request: AuthedRequest,
+  ) {
+    return this.events.updateFormField(eventId, fieldId, body, request.user);
+  }
+
+  @Delete(':eventId/form-fields/:fieldId')
+  @manage
+  deleteFormField(
+    @Param('eventId') eventId: string,
+    @Param('fieldId') fieldId: string,
+    @Req() request: AuthedRequest,
+  ) {
+    return this.events.deleteFormField(eventId, fieldId, request.user);
+  }
+
+  @Delete(':eventId/activities/:activityId')
+  @manage
+  deleteActivity(
+    @Param('eventId') eventId: string,
+    @Param('activityId') activityId: string,
+    @Req() request: AuthedRequest,
+  ) {
+    return this.events.deleteActivity(eventId, activityId, request.user);
+  }
+}
+
+@Controller('events')
+export class PublicEventsController {
+  constructor(private readonly events: EventsService) {}
+
+  @Get(':slug/preview')
+  @UseGuards(AuthGuard)
+  preview(@Param('slug') slug: string, @Req() request: AuthedRequest) {
+    return this.events.previewBySlug(slug, request.user);
+  }
+
+  @Get(':slug')
+  bySlug(@Param('slug') slug: string) {
+    return this.events.publicBySlug(slug);
+  }
+
+  @Post(':slug/registrations')
+  @HttpCode(201)
+  @UseGuards(AuthGuard)
+  register(
+    @Param('slug') slug: string,
+    @Body() body: unknown,
+    @Req() request: AuthedRequest,
+  ) {
+    return this.events.register(slug, body, request.user);
+  }
+}
+
+@Controller('uploads')
+export class UploadsController {
+  @Get(':name')
+  async file(@Param('name') name: string): Promise<StreamableFile> {
+    const full = uploadPath(name);
+    if (!full) throw new NotFoundException('Arquivo não encontrado.');
+    try {
+      await access(full);
+    } catch {
+      throw new NotFoundException('Arquivo não encontrado.');
+    }
+    const type = name.endsWith('.png')
+      ? 'image/png'
+      : name.endsWith('.webp')
+        ? 'image/webp'
+        : 'image/jpeg';
+    return new StreamableFile(createReadStream(full), {
+      type,
+      disposition: 'inline',
+    });
+  }
+}
+
+function isProbe(body: unknown): boolean {
+  return (
+    body == null ||
+    (typeof body === 'object' && !Array.isArray(body) && Object.keys(body).length === 0)
+  );
+}
+
+function isFileTooLarge(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    error.code === 'LIMIT_FILE_SIZE'
+  );
+}

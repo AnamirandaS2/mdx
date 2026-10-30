@@ -156,3 +156,52 @@
     @apply font-heading;
   }
 }
+
+@keyframes mdx-marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.mdx-marquee {
+  display: flex;
+  width: max-content;
+  animation: mdx-marquee 36s linear infinite;
+}
+
+@keyframes mdx-border-spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+.mdx-gradient-ring {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+
+.mdx-gradient-ring::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: -120%;
+  background: conic-gradient(#ff4a97, #ffb020, #ff7a1a, #ff4a97);
+  animation: mdx-border-spin 2.8s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mdx-marquee {
+    width: auto;
+    animation: none;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .mdx-gradient-ring::before {
+    animation: none;
+  }
+}

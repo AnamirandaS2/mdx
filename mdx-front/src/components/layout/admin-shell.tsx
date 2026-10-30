@@ -3,12 +3,13 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { House, Palette, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { CalendarDays, House, Palette, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { Bandeirola } from "@/components/brand/bandeirola";
 import { cn } from "cn";
 
 const links = [
   { href: "/admin", label: "Visão geral", icon: House },
+  { href: "/admin/eventos", label: "Eventos", icon: CalendarDays },
   { href: "/design-system", label: "Design system", icon: Palette },
   { href: "/", label: "Site público", icon: House },
 ];
@@ -41,7 +42,10 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         <nav id="admin-nav" aria-label="Painel" className="flex flex-1 flex-col gap-1 px-2">
           {links.map((link) => {
             const Icon = link.icon;
-            const ativo = pathname === link.href;
+            const ativo =
+              link.href === "/" || link.href === "/admin"
+                ? pathname === link.href
+                : pathname === link.href || pathname.startsWith(`${link.href}/`);
 
             return (
               <Link
